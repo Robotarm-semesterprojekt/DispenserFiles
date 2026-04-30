@@ -1,0 +1,77 @@
+#include <stdio.h>
+#include "pico/stdlib.h"
+#include "hardware/gpio.h"
+#include "hardware/adc.h"
+#include <cstdint>
+
+/// Variables needed for the dispenser control logic
+/// These are changeble parameters that can be adjusted based on the specific hardware setup and requirements.
+///////////////////////////////////////////////////////////////////////////
+int ADC_PIN = 26;                                                       
+int LdrThreshold = 1;                                                                                
+int Chamber = 0;    ///Chamber is used as the Ldr is raised above the lowest domino position                                                    ///          
+int gpioPin1 = 15;                                                     
+int gpioPin1_reverse = 14; // Ekstra pin for reversing
+bool RoboArmInPosition = false;                                         
+///////////////////////////////////////////////////////////////////////////
+
+
+///////////////////////////
+int result = 0;         ///
+float voltage = 0.0f;   ///
+///////////////////////////
+
+
+void readVoltage() {
+    adc_select_input(0);
+    result = adc_read(); // Opdaterer den globale variabel
+    voltage = result * (3.3f / 4095.0f);
+}
+
+void dispenseDomino() {
+    gpio_put(gpioPin1, 1);
+    gpio_put(gpioPin1_reverse, 0);
+    sleep_ms(100);
+    gpio_put(gpioPin1, 0);
+    gpio_put(gpioPin1_reverse, 1); // Revers via H-bro
+    sleep_ms(100);
+    gpio_put(gpioPin1_reverse, 0); // Stop
+    if (Chamber > 0) Chamber--; // Nedtæl kammeret
+}
+
+int main() {
+    stdio_init_all();
+    sleep_ms(2000);
+
+    adc_init();
+    adc_gpio_init(ADC_PIN);
+    gpio_init(gpioPin1);
+    gpio_set_dir(gpioPin1, GPIO_OUT);
+    gpio_init(gpioPin1_reverse);
+    gpio_set_dir(gpioPin1_reverse, GPIO_OUT);
+
+    while (true) {
+        readVoltage();
+        if (RoboArmInPosition) {
+            if (result <= LdrThreshold) {
+                fprintf(stdout, "Domino fundet - dispenser\n");
+                dispenseDomino();
+                RoboArmInPosition = false;
+                Chamber = 3;
+            } else {
+                if (Chamber > 0) {
+                    dispenseDomino();
+                } else {
+                    fprintf(stdout, "Ingen domino fundet\n");
+                }
+            }
+        } else {
+            sleep_ms(100);
+        }
+    }
+}
+
+
+
+
+
